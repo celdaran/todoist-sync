@@ -1,0 +1,21 @@
+INSERT INTO section (id,
+                             name,
+                             project_id,
+                             collapsed,
+                             date_added,
+                             date_archived,
+                             is_archived,
+                             is_deleted,
+                             section_order,
+                             user_id)
+VALUES ($id,
+        '$name',
+        $project_id,
+        $collapsed,
+        '$date_added',
+        '$date_archived',
+        $is_archived,
+        $is_deleted,
+        $section_order,
+        $user_id)
+;

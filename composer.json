@@ -1,0 +1,8 @@
+{
+    "require": {
+        "ext-json": "*",
+        "ext-sqlite3": "*",
+        "guzzlehttp/guzzle": "^7.4",
+        "vlucas/phpdotenv": "^5.4"
+    }
+}
