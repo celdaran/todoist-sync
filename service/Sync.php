@@ -74,13 +74,13 @@ class Sync
             ];
             /** @var Result $result */
             foreach ($value as $result) {
-                echo $entity .
-                    "\t" . ($result->getSucceeded() ? 1 : 0) .
-                    "\t" . ($result->getInserted() ? 1 : 0) .
-                    "\t" . ($result->getUpdated() ? 1 : 0) .
-                    "\t" . ($result->getDeleted() ? 1 : 0) .
-                    "\t" . $result->getMessage() .
-                    "\n";
+//                echo $entity .
+//                    "\t" . ($result->getSucceeded() ? 1 : 0) .
+//                    "\t" . ($result->getInserted() ? 1 : 0) .
+//                    "\t" . ($result->getUpdated() ? 1 : 0) .
+//                    "\t" . ($result->getDeleted() ? 1 : 0) .
+//                    "\t" . $result->getMessage() .
+//                    "\n";
                 if ($result->getSucceeded()) {
                     $sum['success']++;
                 }
@@ -96,6 +96,10 @@ class Sync
             }
             $this->data->insertImportHistory($sum);
         }
+
+        $stats = $this->todoist->getApiStats();
+
+        echo "Total API calls: " . $stats['post_count'] . "\n";
         echo "Script finished at " . date('c') . "\n";
     }
 
