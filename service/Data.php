@@ -213,6 +213,15 @@ class Data
     {
         $result = new Result();
 
+        // Get a before snapshot
+        $beforeSql = $this->doSubs($this->getSql($table, 'before'), $row);
+        if ($beforeSql <> 'QUERY-NOT-FOUND') {
+            $beforeRow = $this->db->query($beforeSql);
+            $beforeRow = $beforeRow->fetchArray(SQLITE3_ASSOC);
+        } else {
+            $beforeRow = [];
+        }
+
         // Get the update statement
         $sql = $this->doSubs($this->getSql($table, 'update'), $row);
 
@@ -223,8 +232,8 @@ class Data
             // If it succeeded, find out how many rows were affected
             $changes = $this->db->querySingle('SELECT changes()');
 
-            // If no rows, then nothing updated, so let's insert
             if ($changes === 0) {
+                // If no rows, then nothing updated, so let's insert
                 $sql = $this->doSubs($this->getSql($table, 'insert'), $row);
                 $succeeded = $this->db->exec($sql);
                 if ($succeeded) {
@@ -236,15 +245,30 @@ class Data
                     $result->setMessage("Insert failed: $msg");
                 }
 
-                // If one change, then we're good: upsert complete
             } else {
                 if ($changes === 1) {
-                    $result->setSucceeded();
-                    $result->setUpdated();
-                    $result->setMessage("Updated $table row {$row['id']}");
+                    // If one change, the upsert succeeded, but we don't know if
+                    // anything ACTUALLY updated. So lets compare the row's before
+                    // data to the current $row data and decide how to proceed
 
-                    // Otherwise, this is alarming
+                    if ($this->rowChanged($beforeRow, $row)) {
+                        // If the row TRULY changed, then run a special update for the modified row
+                        $updateModified = sprintf('UPDATE %s SET modified = CURRENT_TIMESTAMP WHERE id = %d', $table, $row['id']);
+                        $this->db->exec($updateModified);
+
+                        // And then react accordingly
+                        $changes = $this->db->querySingle('SELECT changes()');
+                        if ($changes === 1) {
+                            $result->setSucceeded();
+                            $result->setUpdated();
+                            $result->setMessage("Updated $table row {$row['id']}");
+                        } else {
+                            $msg = $this->db->lastErrorMsg();
+                            $result->setMessage("Unexpected value returned from changes(): $changes, msg: $msg");
+                        }
+                    }
                 } else {
+                    // Otherwise, this is alarming
                     $msg = $this->db->lastErrorMsg();
                     $result->setMessage("Unexpected value returned from changes(): $changes, msg: $msg");
                 }
@@ -368,4 +392,57 @@ class Data
         }
     }
 
+    /**
+     * @param array $beforeRow
+     * @param array $row
+     * @return bool
+     */
+    private function rowChanged(array $beforeRow, array $row): bool
+    {
+        $keys = array_keys($beforeRow);
+
+        foreach ($keys as $key) {
+
+            if ($beforeRow[$key] === "null") {
+                // convert string null to actual null
+                $beforeRow[$key] = null;
+            }
+
+            if ($key === 'inbox_project') {
+                // weird column, just ignore it
+                unset($beforeRow[$key]);
+            }
+
+            // rename columns if needed
+
+            if ($key === 'task_id') {
+                $beforeRow['item_id'] = $row['item_id'];
+                unset($beforeRow['task_id']);
+            }
+
+            if ($key === 'task_order') {
+                $beforeRow['item_order'] = $row['item_order'];
+                unset($beforeRow['task_order']);
+            }
+
+        }
+
+        // Recalculate keys
+        $keys = array_keys($beforeRow);
+
+        $return = false;
+
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $row)) {
+                // do NOT use the !== operator here
+                if ($beforeRow[$key] != $row[$key]) {
+                    $return = true;
+                }
+//            } else {
+//                echo "key $key does not exist in upstream table $table\n";
+            }
+        }
+
+        return $return;
+    }
 }
