@@ -12,6 +12,9 @@ class Todoist
     /** @var Client */
     private Client $client;
 
+    /** @var array */
+    private array $stats;
+
     /**
      * Instantiates guzzle client
      */
@@ -21,6 +24,9 @@ class Todoist
         $this->client = new Client([
             'base_uri' => $endpoint,
         ]);
+        $this->stats = [
+            'post_count' => 0,
+        ];
     }
 
     /**
@@ -75,6 +81,15 @@ class Todoist
     }
 
     /**
+     * Return API stats
+     * @return array|int[]
+     */
+    public function getApiStats(): array
+    {
+        return $this->stats;
+    }
+
+    /**
      * @param string $uri
      * @param array $body
      * @return array
@@ -116,6 +131,8 @@ class Todoist
         echo "POST $uri " . json_encode($body) . "\n";
 
         $contents = $request->getBody()->getContents();
+
+        $this->stats['post_count']++;
 
         return json_decode($contents, true);
     }
