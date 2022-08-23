@@ -287,7 +287,7 @@ class Data
             // The update itself didn't work
         } else {
             $msg = $this->db->lastErrorMsg();
-            $result['message'] = "Error running initial update: $msg";
+            $result->setMessage("Error running initial update: $msg");
         }
 
         return $result;
@@ -297,6 +297,7 @@ class Data
      * @param string $table
      * @param array $row
      * @return Result
+     * @noinspection PhpSameParameterValueInspection
      */
     private function execDelete(string $table, array $row): Result
     {
@@ -375,7 +376,7 @@ class Data
     private function _subLogic($str, $name, $value): string
     {
         if ($value === false) {
-            // true automatically maps to 1, false doesn't
+            // true automatically maps to 1, false doesn't,
             // so we'll handle that here
             return str_replace('$' . $name, 0, $str);
         }
