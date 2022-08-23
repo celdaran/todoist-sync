@@ -1,6 +1,7 @@
 <?php namespace App\Service;
 
 use Dotenv\Dotenv;
+use DateTimeZone;
 
 /**
  * Primary class for todoist synchronization app
@@ -243,17 +244,17 @@ class Sync
     {
         $projects = $this->data->getProjects();
         foreach ($projects as $project) {
-            if (!$project['is_archived'] && !$project['is_deleted']) {
+            if ($this->isProjectActive($project)) {
                 $updatedProject = $this->todoist->getProject($project['id']);
                 if (array_key_exists('project', $updatedProject)) {
                     $result = $this->data->updateProject($updatedProject['project']);
-                    $this->stats['projects-updated'][] = $result;
                 } else {
                     // assume it's deleted
                     $project['is_deleted'] = 1;
                     $result = $this->data->updateProject($project);
-                    $this->stats['projects-updated'][] = $result;
                 }
+                $this->stats['projects-updated'][] = $result;
+                $this->data->setLastSynced('project', $project['id']);
             }
         }
         return $projects;
@@ -298,6 +299,7 @@ class Sync
                             }
                         }
                     }
+                    $this->data->setLastSynced('task', $task['id']);
                 } else {
                     $result = new Result();
                 }
@@ -311,6 +313,19 @@ class Sync
     //------------------------------------------------------------------
 
     /**
+     * @param array $project
+     * @return bool
+     */
+    private function isProjectActive(array $project): bool
+    {
+        if ($project['is_archived'] || $project['is_deleted']) {
+            return false;
+        } else {
+            return $this->_potentiallyOutOfSync($project['last_synced']);
+        }
+    }
+
+    /**
      * @param array $task
      * @param array $projects
      * @return bool
@@ -318,6 +333,23 @@ class Sync
     private function isTaskActive(array $task, array $projects): bool
     {
         if ($task['in_history'] || $task['is_deleted'] || $this->taskProjectInactive($task['project_id'], $projects)) {
+            return false;
+        } else {
+            return $this->_potentiallyOutOfSync($task['last_synced']);
+        }
+    }
+
+    /**
+     * @param string $lastSynced
+     * @return bool
+     */
+    private function _potentiallyOutOfSync(string $lastSynced): bool
+    {
+        $utc = new DateTimeZone('UTC');
+        $lastSyncedDate = date_create($lastSynced, $utc);
+        $currentDate = date_create('now', $utc);
+        $diffInSeconds = $currentDate->getTimestamp() - $lastSyncedDate->getTimestamp();
+        if ($diffInSeconds < 120) { // TODO: configure this
             return false;
         } else {
             return true;
