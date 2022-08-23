@@ -10,6 +10,5 @@ SET content        = '$content',
     priority       = $priority,
     project_id     = $project_id,
     section_id     = $section_id,
-    user_id        = $user_id,
-    last_synced    = CURRENT_TIMESTAMP
+    user_id        = $user_id
 WHERE id = $id;

@@ -1,4 +1,3 @@
 UPDATE task
-SET is_deleted = $is_deleted,
-    modified   = CURRENT_TIMESTAMP
+SET is_deleted = $is_deleted
 WHERE id = $id;
