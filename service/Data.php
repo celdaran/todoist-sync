@@ -174,6 +174,16 @@ class Data
         return $this->execUpsert('comment', $comment);
     }
 
+    /**
+     * @param string $table
+     * @param int $id
+     */
+    public function setLastSynced(string $table, int $id)
+    {
+        $updateLastSynced = "UPDATE $table SET last_synced = CURRENT_TIMESTAMP WHERE id = $id";
+        $this->db->exec($updateLastSynced);
+    }
+
     //------------------------------------------------------------------
     // Internal sqlite data access layer
     //------------------------------------------------------------------
