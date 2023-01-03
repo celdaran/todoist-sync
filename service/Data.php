@@ -125,7 +125,7 @@ class Data
      */
     public function updateTaskDue(array $task): Result
     {
-        return $this->execUpsert('task-due', $task);
+        return $this->execUpsert('task-due', $task, true);
     }
 
     /**
@@ -134,7 +134,7 @@ class Data
      */
     public function updateTaskDeleted(array $task): Result
     {
-        return $this->execUpsert('task-deleted', $task);
+        return $this->execUpsert('task-deleted', $task, true);
     }
 
     /**
@@ -219,7 +219,7 @@ class Data
      * @param array $row
      * @return Result
      */
-    private function execUpsert(string $table, array $row): Result
+    private function execUpsert(string $table, array $row, bool $fake = false): Result
     {
         $result = new Result();
 
@@ -227,15 +227,23 @@ class Data
         $beforeSql = $this->doSubs($this->getSql($table, 'before'), $row);
         if ($beforeSql <> 'QUERY-NOT-FOUND') {
             $beforeRow = $this->db->query($beforeSql);
-            $beforeRow = $beforeRow->fetchArray(SQLITE3_ASSOC);
+            if (!is_bool($beforeRow)) {
+                $beforeRow = $beforeRow->fetchArray(SQLITE3_ASSOC);
+            } else {
+                $beforeRow = [];
+            }
         } else {
             $beforeRow = [];
         }
+
+        $normalizedTable = str_replace('-', '_', $table);
 
         // Get the update statement
         $sql = $this->doSubs($this->getSql($table, 'update'), $row);
 
         // Run it and check results
+//        echo "DEBUG(upsert): $sql\n";
+
         $succeeded = $this->db->exec($sql);
         if ($succeeded) {
 
@@ -249,7 +257,7 @@ class Data
                 if ($succeeded) {
                     $result->setSucceeded();
                     $result->setInserted();
-                    $result->setMessage("Inserted $table row {$row['id']}");
+                    $result->setMessage("Inserted $normalizedTable row {$row['id']}");
                 } else {
                     $msg = $this->db->lastErrorMsg();
                     $result->setMessage("Insert failed: $msg");
@@ -261,9 +269,9 @@ class Data
                     // anything ACTUALLY updated. So lets compare the row's before
                     // data to the current $row data and decide how to proceed
 
-                    if ($this->rowChanged($beforeRow, $row)) {
+                    if ($this->rowChanged($beforeRow, $row) && !$fake) {
                         // If the row TRULY changed, then run a special update for the modified row
-                        $updateModified = sprintf('UPDATE %s SET modified = CURRENT_TIMESTAMP WHERE id = %d', $table, $row['id']);
+                        $updateModified = sprintf('UPDATE %s SET modified = CURRENT_TIMESTAMP WHERE id = %d', $normalizedTable, $row['id']);
                         $this->db->exec($updateModified);
 
                         // And then react accordingly
@@ -271,7 +279,7 @@ class Data
                         if ($changes === 1) {
                             $result->setSucceeded();
                             $result->setUpdated();
-                            $result->setMessage("Updated $table row {$row['id']}");
+                            $result->setMessage("Updated $normalizedTable row {$row['id']}");
                         } else {
                             $msg = $this->db->lastErrorMsg();
                             $result->setMessage("Unexpected value returned from changes(): $changes, msg: $msg");
@@ -328,6 +336,8 @@ class Data
         $result = new Result();
 
         $sql = $this->doSubs($this->getSql($table, 'insert'), $row);
+
+//        echo "DEBUG(insert): $sql\n";
 
         $succeeded = $this->db->exec($sql);
         if ($succeeded) {
