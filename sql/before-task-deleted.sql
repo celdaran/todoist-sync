@@ -1,4 +1,3 @@
-SELECT
-  is_deleted
+SELECT is_deleted
 FROM task
-WHERE id = $id;
+WHERE id = '$id';

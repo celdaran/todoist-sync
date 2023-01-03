@@ -1,13 +1,13 @@
 INSERT INTO user (id,
                   email,
                   full_name,
-                  inbox_project,
-                  join_date,
+                  inbox_project_id,
+                  joined_at,
                   karma)
 VALUES ($id,
         '$email',
         '$full_name',
-        $inbox_project,
-        '$join_date',
+        '$inbox_project_id',
+        '$joined_at',
         $karma)
 ;

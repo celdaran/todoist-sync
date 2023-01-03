@@ -1,15 +1,16 @@
-SELECT
-    content,
-    date_added,
-    date_completed,
-    description,
-    has_more_notes,
-    in_history,
-    is_deleted,
-    parent_id,
-    priority,
-    project_id,
-    section_id,
-    user_id
+SELECT content,
+       added_at,
+       added_by_uid,
+       assigned_by_uid,
+       checked,
+       collapsed,
+       completed_at,
+       description,
+       parent_id,
+       priority,
+       project_id,
+       section_id,
+       sync_id,
+       user_id
 FROM task
-WHERE id = $id;
+WHERE id = '$id';
