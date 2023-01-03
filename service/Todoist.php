@@ -93,6 +93,7 @@ class Todoist
      * @param string $uri
      * @param array $body
      * @return array
+     * @throws Exception
      */
     private function postSync(string $uri, array $body = []): array
     {
@@ -101,9 +102,8 @@ class Todoist
             $element = $this->_postSync($uri, $body);
         } catch (GuzzleException $e) {
             if ($e->getCode() !== 404) {
-                // If it's anything other than a 404, let's make some noise
-                echo "Guzzle Exception: " . $e->getMessage();
-                exit; // and maybe exit, if we can't talk to Todoist
+                // If it's anything other than a 404, [re]throw the error
+                throw new Exception($e->getMessage());
             }
             $element = [];
         } catch (Exception $e) {
