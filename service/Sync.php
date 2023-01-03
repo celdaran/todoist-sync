@@ -1,7 +1,7 @@
 <?php namespace App\Service;
 
+use Exception;
 use Dotenv\Dotenv;
-use DateTimeZone;
 
 /**
  * Primary class for todoist synchronization app
@@ -21,9 +21,9 @@ class Sync
 
     public function init()
     {
-        echo "-------------------------------------------\n";
-        echo "Script started at " . date('c') . "\n";
-        echo "-------------------------------------------\n";
+        echo "---------------------------------------------------------\n";
+        echo "Script version " . self::VERSION . " started at " . date('c') . "\n";
+        echo "---------------------------------------------------------\n";
 
         // Read .env file
         $dotenv = Dotenv::createImmutable(__DIR__ . '/..');
