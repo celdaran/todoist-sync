@@ -43,6 +43,36 @@ class Todoist
     }
 
     /**
+     * Call the Sync API to get all archived resources
+     * @param string $projectId
+     * @return array
+     */
+    public function getArchive(string $projectId): array
+    {
+        $archive['has_more'] = true;
+        $archives = [];
+
+        while ($archive['has_more']) {
+            $uri = 'archive/items?project_id=' . $projectId;
+            if (array_key_exists('next_cursor', $archive)) {
+                $uri .= '&cursor=' . $archive['next_cursor'];
+            }
+            $archive = $this->postSync($uri, [
+                'sync_token' => '*',
+                'resource_types' => '["all"]',
+            ]);
+            foreach ($archive['items'] as $delme) {
+                if ($delme['parent_id']) {
+                    $foo = 'bar';
+                }
+            }
+            $archives = array_merge($archives, $archive['items']);
+        }
+
+        return $archives;
+    }
+
+    /**
      * Call the Sync API to get an individual task
      * @param int $taskId
      * @return array

@@ -10,6 +10,9 @@ use Dotenv\Dotenv;
  */
 class Sync
 {
+    /** @var string */
+    const VERSION = '9.0.0';
+
     /** @var Todoist */
     private Todoist $todoist;
 
@@ -18,6 +21,9 @@ class Sync
 
     /** @var array */
     private array $stats;
+
+    /** @var array */
+    private array $debug;
 
     public function init()
     {
@@ -35,6 +41,10 @@ class Sync
 
         // Initialize stats
         $this->stats = [];
+        $this->debug = [
+            'projects' => 0,
+            'archived-tasks' => 0,
+        ];
     }
 
     /**
@@ -42,19 +52,27 @@ class Sync
      */
     public function exec()
     {
-        # Pass 1: from todoist -> localdb
-        $todoist = $this->todoist->getAll();
-        $this->updateLabels($todoist['labels']);
-        $this->updateProjects($todoist['projects']);
-        $this->updateUser($todoist['user']);
-        $this->updateSections($todoist['sections']);
-        $this->updateTasks($todoist['items']);    // tasks are still called items in api v8
-        $this->updateComments($todoist['notes']); // comments are still called notes in api v8
+        try {
+            # Pass 1: Active
+            $todoist = $this->todoist->getAll();
+            $this->updateLabels($todoist['labels']);
+            $this->updateProjects($todoist['projects']);
+            $this->updateUser($todoist['user']);
+            $this->updateSections($todoist['sections']);
+            $this->updateTasks($todoist['items']);    // tasks are still called items in api v8 and v9
+            $this->updateComments($todoist['notes']); // comments are still called notes in api v8 and v9
 
-        # Pass 2: from localdb -> todoist
-        $projects = $this->updateProjectsLocally();
-        $this->updateSectionsLocally();
-        $this->updateTasksLocally($projects);
+            # Pass 2: Archive
+            $projects = $this->data->getProjects();
+            foreach ($projects as $p) {
+                $this->debug['projects']++;
+                $tasks = $this->todoist->getArchive($p['id']);
+                $this->updateArchivedProject($tasks);
+            }
+        }
+        catch (Exception $e) {
+            echo "Exception detected: " . $e->getMessage() . "\n";
+        }
     }
 
     /**
@@ -100,6 +118,9 @@ class Sync
         $stats = $this->todoist->getApiStats();
 
         echo "Total API calls: " . $stats['post_count'] . "\n";
+        echo "Total projects: " . $this->debug['projects'] . "\n";
+        echo "Total tasks: " . count($this->stats['tasks']) . "\n";
+        echo "Total archived tasks: " . $this->debug['archived-tasks'] . "\n";
         echo "Script finished at " . date('c') . "\n";
     }
 
@@ -242,157 +263,17 @@ class Sync
     }
 
     /**
-     * @return array
-     */
-    private function updateProjectsLocally(): array
-    {
-        $projects = $this->data->getProjects();
-        foreach ($projects as $project) {
-            if ($this->isProjectActive($project)) {
-                $updatedProject = $this->todoist->getProject($project['id']);
-                if (array_key_exists('project', $updatedProject)) {
-                    $result = $this->data->updateProject($updatedProject['project']);
-                } else {
-                    // assume it's deleted
-                    $project['is_deleted'] = 1;
-                    $result = $this->data->updateProject($project);
-                }
-                $this->stats['projects-updated'][] = $result;
-                $this->data->setLastSynced('project', $project['id']);
-            }
-        }
-        return $projects;
-    }
-
-    /**
+     * Accept an array of tasks from sync/v9/archive/items?project_id=9999
+     * and update statuses in local database
      *
+     * @param array $tasks
      */
-    private function updateSectionsLocally()
+    private function updateArchivedProject(array $tasks)
     {
-        $sections = $this->data->getSections();
-        foreach ($sections as $section) {
-            if (!$section['is_archived'] && !$section['is_deleted']) {
-                $updatedSection = $this->todoist->getSection($section['id']);
-                $result = $this->data->updateSection($updatedSection['section']);
-                $this->stats['sections-updated'][] = $result;
-            }
-        }
-    }
-
-    /**
-     * @param array $projects
-     */
-    private function updateTasksLocally(array $projects)
-    {
-        $tasks = $this->data->getTasks();
         foreach ($tasks as $task) {
-            if ($this->isTaskActive($task, $projects)) {
-                $updatedTask = $this->todoist->getTask($task['id']);
-                if (array_key_exists('item', $updatedTask)) {
-                    if ($updatedTask['item']['is_deleted']) {
-                        $result = $this->data->updateTaskDeleted($updatedTask['item']);
-                    } else {
-                        $result = $this->data->updateTask($updatedTask['item']);
-                        // Look for missing comments
-                        $comments = $this->data->getComments($task['id']);
-                        foreach ($comments as $comment) {
-                            if (!in_array($comment['id'], $this->getCommentIds($updatedTask['notes']))) {
-                                $comment['is_deleted'] = 1;
-                                $comment['item_id'] = $comment['task_id']; // compatability
-                                $this->data->updateComment($comment);
-                            }
-                        }
-                    }
-                    $this->data->setLastSynced('task', $task['id']);
-                } else {
-                    $result = new Result();
-                }
-                $this->stats['tasks-updated'][] = $result;
-            }
+            $this->debug['archived-tasks']++;
+            $this->data->updateTask($task);
         }
     }
 
-    //------------------------------------------------------------------
-    // Additional helpers
-    //------------------------------------------------------------------
-
-    /**
-     * @param array $project
-     * @return bool
-     */
-    private function isProjectActive(array $project): bool
-    {
-        if ($project['is_archived'] || $project['is_deleted']) {
-            return false;
-        } else {
-            return $this->_potentiallyOutOfSync($project['last_synced']);
-        }
-    }
-
-    /**
-     * @param array $task
-     * @param array $projects
-     * @return bool
-     */
-    private function isTaskActive(array $task, array $projects): bool
-    {
-        if ($task['in_history'] || $task['is_deleted'] || $this->taskProjectInactive($task['project_id'], $projects)) {
-            return false;
-        } else {
-            return $this->_potentiallyOutOfSync($task['last_synced']);
-        }
-    }
-
-    /**
-     * @param string $lastSynced
-     * @return bool
-     */
-    private function _potentiallyOutOfSync(string $lastSynced): bool
-    {
-        $utc = new DateTimeZone('UTC');
-        $lastSyncedDate = date_create($lastSynced, $utc);
-        $currentDate = date_create('now', $utc);
-        $diffInSeconds = $currentDate->getTimestamp() - $lastSyncedDate->getTimestamp();
-        if ($diffInSeconds < 120) { // TODO: configure this
-            return false;
-        } else {
-            return true;
-        }
-    }
-
-    /**
-     * @param int $projectId
-     * @param array $projects
-     * @return bool
-     */
-    private function taskProjectInactive(int $projectId, array $projects): bool
-    {
-        $inactive = false;
-
-        foreach ($projects as $project) {
-            if ($project['id'] === $projectId) {
-                if ($project['is_archived'] || $project['is_deleted']) {
-                    $inactive = true;
-                    break;
-                }
-            }
-        }
-
-        return $inactive;
-    }
-
-    /**
-     * @param array $comments
-     * @return array
-     */
-    private function getCommentIds(array $comments): array
-    {
-        $ids = [];
-
-        foreach ($comments as $comment) {
-            $ids[] = $comment['id'];
-        }
-
-        return $ids;
-    }
 }
